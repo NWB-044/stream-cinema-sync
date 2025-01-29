@@ -8,13 +8,15 @@ interface AuthContextType extends AuthState {
   logout: () => void;
   initializeViewer: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => void;
+  isAdmin: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ADMIN_CREDENTIALS = {
   username: 'Bipho',
-  password: 'Kipli123'
+  password: 'Kipli123',
+  port: 2009
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -34,9 +36,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const deviceId = generateDeviceId();
         const ipAddress = await getIPAddress();
         const storedAuth = localStorage.getItem('auth');
+        const currentPort = window.location.port;
+
+        console.log('Current port:', currentPort);
+        console.log('Device ID:', deviceId);
+        console.log('IP Address:', ipAddress);
 
         if (storedAuth) {
           const userData = JSON.parse(storedAuth);
+          // Verify if admin is accessing through correct port
+          if (userData.role === 'admin' && currentPort !== String(ADMIN_CREDENTIALS.port)) {
+            console.log('Admin accessing from wrong port');
+            localStorage.removeItem('auth');
+            setAuthState(prev => ({
+              ...prev,
+              deviceId,
+              ipAddress,
+              isLoading: false
+            }));
+            return;
+          }
+
           setAuthState({
             ...userData,
             deviceId,
@@ -46,6 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           console.log('Auth restored from storage:', userData);
         } else {
+          // Auto-initialize viewer if not on admin port
+          if (currentPort !== String(ADMIN_CREDENTIALS.port)) {
+            await initializeViewer();
+          }
           setAuthState(prev => ({
             ...prev,
             deviceId,
@@ -70,13 +94,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         lastSeen: new Date()
       }));
-    }, 60000); // Update lastSeen every minute
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
   const login = async (username: string, password: string) => {
     try {
+      const currentPort = window.location.port;
+      
+      if (currentPort !== String(ADMIN_CREDENTIALS.port)) {
+        throw new Error('Admin login only allowed on port 2009');
+      }
+
       if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
         const adminUser: User = {
           id: 'admin',
@@ -111,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Login error:', error);
       toast({
         title: "Login Failed",
-        description: "Invalid username or password",
+        description: error instanceof Error ? error.message : "Invalid username or password",
         variant: "destructive"
       });
       throw error;
@@ -184,6 +214,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const isAdmin = () => {
+    return authState.user?.role === 'admin';
+  };
+
   const logout = () => {
     localStorage.removeItem('auth');
     setAuthState({
@@ -208,7 +242,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login, 
       logout, 
       initializeViewer,
-      updateProfile 
+      updateProfile,
+      isAdmin 
     }}>
       {children}
     </AuthContext.Provider>
