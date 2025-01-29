@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, AuthState } from '@/types/auth';
 import { useToast } from '@/hooks/use-toast';
+import { generateDeviceId, getIPAddress } from '@/utils/deviceUtils';
 
 interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   initializeViewer: () => Promise<void>;
+  updateProfile: (updates: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,19 +21,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
     isAuthenticated: false,
-    isLoading: true
+    isLoading: true,
+    lastSeen: new Date(),
+    deviceId: '',
+    ipAddress: ''
   });
   const { toast } = useToast();
 
-  // Generate a unique device ID for viewers
-  const generateDeviceId = () => {
-    const storedId = localStorage.getItem('deviceId');
-    if (storedId) return storedId;
-    
-    const newId = 'device_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('deviceId', newId);
-    return newId;
-  };
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const deviceId = generateDeviceId();
+        const ipAddress = await getIPAddress();
+        const storedAuth = localStorage.getItem('auth');
+
+        if (storedAuth) {
+          const userData = JSON.parse(storedAuth);
+          setAuthState({
+            ...userData,
+            deviceId,
+            ipAddress,
+            isLoading: false,
+            lastSeen: new Date()
+          });
+          console.log('Auth restored from storage:', userData);
+        } else {
+          setAuthState(prev => ({
+            ...prev,
+            deviceId,
+            ipAddress,
+            isLoading: false
+          }));
+          console.log('New session initialized');
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        toast({
+          title: "Error",
+          description: "Failed to initialize authentication",
+          variant: "destructive"
+        });
+      }
+    };
+
+    initAuth();
+    const interval = setInterval(() => {
+      setAuthState(prev => ({
+        ...prev,
+        lastSeen: new Date()
+      }));
+    }, 60000); // Update lastSeen every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   const login = async (username: string, password: string) => {
     try {
@@ -41,16 +83,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           username: ADMIN_CREDENTIALS.username,
           role: 'admin',
           isOnline: true,
-          lastSeen: new Date()
+          lastSeen: new Date(),
+          deviceId: authState.deviceId,
+          ipAddress: authState.ipAddress,
+          profilePicture: '/placeholder.svg',
+          status: 'Active'
         };
         
-        setAuthState({
+        setAuthState(prev => ({
+          ...prev,
           user: adminUser,
           isAuthenticated: true,
           isLoading: false
-        });
+        }));
         
         localStorage.setItem('auth', JSON.stringify(adminUser));
+        console.log('Admin login successful:', adminUser);
+        
         toast({
           title: "Login Successful",
           description: "Welcome back, admin!",
@@ -59,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Invalid credentials');
       }
     } catch (error) {
+      console.error('Login error:', error);
       toast({
         title: "Login Failed",
         description: "Invalid username or password",
@@ -70,26 +120,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const initializeViewer = async () => {
     try {
-      const deviceId = generateDeviceId();
+      const deviceId = authState.deviceId || generateDeviceId();
+      const ipAddress = authState.ipAddress || await getIPAddress();
+      
       const viewerUser: User = {
         id: deviceId,
         username: `Viewer_${deviceId.slice(-4)}`,
         role: 'viewer',
         deviceId,
+        ipAddress,
         isOnline: true,
-        lastSeen: new Date()
+        lastSeen: new Date(),
+        profilePicture: '/placeholder.svg',
+        status: 'Online'
       };
       
-      setAuthState({
+      setAuthState(prev => ({
+        ...prev,
         user: viewerUser,
         isAuthenticated: true,
-        isLoading: false
-      });
+        isLoading: false,
+        deviceId,
+        ipAddress
+      }));
       
       localStorage.setItem('auth', JSON.stringify(viewerUser));
       console.log('Viewer initialized:', viewerUser);
+      
+      toast({
+        title: "Connected",
+        description: "You're now connected as a viewer",
+      });
     } catch (error) {
-      console.error('Failed to initialize viewer:', error);
+      console.error('Viewer initialization error:', error);
       toast({
         title: "Connection Error",
         description: "Failed to connect as viewer",
@@ -98,39 +161,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateProfile = (updates: Partial<User>) => {
+    if (!authState.user) return;
+
+    const updatedUser = {
+      ...authState.user,
+      ...updates,
+      lastSeen: new Date()
+    };
+
+    setAuthState(prev => ({
+      ...prev,
+      user: updatedUser
+    }));
+
+    localStorage.setItem('auth', JSON.stringify(updatedUser));
+    console.log('Profile updated:', updatedUser);
+    
+    toast({
+      title: "Profile Updated",
+      description: "Your profile has been updated successfully",
+    });
+  };
+
   const logout = () => {
     localStorage.removeItem('auth');
     setAuthState({
       user: null,
       isAuthenticated: false,
-      isLoading: false
+      isLoading: false,
+      deviceId: authState.deviceId,
+      ipAddress: authState.ipAddress,
+      lastSeen: new Date()
     });
+    
+    console.log('User logged out');
     toast({
       title: "Logged Out",
       description: "You have been logged out successfully",
     });
   };
 
-  useEffect(() => {
-    const initAuth = async () => {
-      const storedAuth = localStorage.getItem('auth');
-      if (storedAuth) {
-        const userData = JSON.parse(storedAuth);
-        setAuthState({
-          user: userData,
-          isAuthenticated: true,
-          isLoading: false
-        });
-      } else {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-      }
-    };
-
-    initAuth();
-  }, []);
-
   return (
-    <AuthContext.Provider value={{ ...authState, login, logout, initializeViewer }}>
+    <AuthContext.Provider value={{ 
+      ...authState, 
+      login, 
+      logout, 
+      initializeViewer,
+      updateProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );

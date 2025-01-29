@@ -3,6 +3,7 @@ export interface User {
   username: string;
   role: 'admin' | 'viewer';
   deviceId?: string;
+  ipAddress?: string;
   lastSeen?: Date;
   isOnline?: boolean;
   profilePicture?: string;
@@ -13,4 +14,7 @@ export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  deviceId?: string;
+  ipAddress?: string;
+  lastSeen?: Date;
 }
