@@ -3,18 +3,20 @@ import VideoPlayer from '../components/VideoPlayer';
 import FileManager from '../components/FileManager';
 import Chat from '../components/Chat';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { LogOut } from 'lucide-react';
 
 const Index = () => {
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user, logout, initializeViewer } = useAuth();
   const [currentVideo, setCurrentVideo] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
-    // For demo, we'll set admin based on localStorage
-    const role = localStorage.getItem('role') || 'viewer';
-    setIsAdmin(role === 'admin');
-    console.log('Role set:', role);
+    if (user?.role === 'viewer') {
+      initializeViewer();
+    }
   }, []);
 
   const handleFileSelect = (file: string) => {
@@ -34,28 +36,49 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-stream-background text-stream-text">
       <div className="container mx-auto p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* File Manager Section */}
-          <div className="lg:col-span-3 animate-fadeIn">
-            <FileManager 
-              onVideoSelect={handleFileSelect}
-              onSubtitleSelect={handleSubtitleSelect}
-              isAdmin={isAdmin}
-            />
+        {/* Header with user info */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">{user?.username}</span>
+            <span className="text-xs px-2 py-1 rounded bg-stream-primary">
+              {user?.role.toUpperCase()}
+            </span>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="text-stream-text hover:text-stream-primary"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* File Manager Section - Only visible to admin */}
+          {user?.role === 'admin' && (
+            <div className="lg:col-span-3 animate-fadeIn">
+              <FileManager 
+                onVideoSelect={handleFileSelect}
+                onSubtitleSelect={handleSubtitleSelect}
+                isAdmin={true}
+              />
+            </div>
+          )}
 
           {/* Video Player Section */}
-          <div className="lg:col-span-6 animate-fadeIn">
+          <div className={`lg:col-span-${user?.role === 'admin' ? '6' : '9'} animate-fadeIn`}>
             <VideoPlayer
               src={currentVideo}
               subtitle={subtitle}
-              isAdmin={isAdmin}
+              isAdmin={user?.role === 'admin'}
             />
           </div>
 
           {/* Chat Section */}
           <div className="lg:col-span-3 animate-fadeIn">
-            <Chat isAdmin={isAdmin} />
+            <Chat isAdmin={user?.role === 'admin'} />
           </div>
         </div>
       </div>
