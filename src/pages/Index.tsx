@@ -15,9 +15,10 @@ const Index = () => {
 
   useEffect(() => {
     if (user?.role === 'viewer') {
-      initializeViewer();
+      // Pass a default username for initialization
+      initializeViewer({ username: `Viewer_${Math.random().toString(36).substr(2, 9)}` });
     }
-  }, []);
+  }, [user?.role]);
 
   const handleFileSelect = (file: string) => {
     setCurrentVideo(file);
