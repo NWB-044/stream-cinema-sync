@@ -15,8 +15,9 @@ const Index = () => {
 
   useEffect(() => {
     if (user?.role === 'viewer') {
-      // Pass a default username for initialization
-      initializeViewer({ username: `Viewer_${Math.random().toString(36).substr(2, 9)}` });
+      // Generate a random username string
+      const randomUsername = `Viewer_${Math.random().toString(36).substr(2, 9)}`;
+      initializeViewer(randomUsername);
     }
   }, [user?.role]);
 
