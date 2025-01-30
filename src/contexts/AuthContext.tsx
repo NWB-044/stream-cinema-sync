@@ -1,22 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, AuthState } from '@/types/auth';
+import { User, AuthState, AuthContextType } from '@/types/auth';
 import { useToast } from '@/hooks/use-toast';
 import { generateDeviceId, getIPAddress } from '@/utils/deviceUtils';
 
-interface AuthContextType extends AuthState {
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
-  isAdmin: () => boolean;
-  initializeViewer: (username: string) => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 const ADMIN_CREDENTIALS = {
   username: 'Bipho',
-  password: 'Kipli123',
-  port: '2009'
+  password: 'Kipli123'
 };
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
@@ -25,7 +17,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading: true,
     lastSeen: new Date(),
     deviceId: '',
-    ipAddress: ''
+    ipAddress: '',
+    theme: 'system'
   });
   
   const { toast } = useToast();
@@ -35,80 +28,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const deviceId = generateDeviceId();
         const ipAddress = await getIPAddress();
-        const currentPort = window.location.port;
         const storedAuth = localStorage.getItem('auth');
+        const storedTheme = localStorage.getItem('theme') as 'dark' | 'light' | 'system' || 'system';
 
-        console.log('Current port:', currentPort);
         console.log('Device ID:', deviceId);
         console.log('IP Address:', ipAddress);
 
         if (storedAuth) {
           const userData = JSON.parse(storedAuth);
-          if (userData.role === 'admin' && currentPort === ADMIN_CREDENTIALS.port) {
-            setAuthState({
-              ...userData,
-              deviceId,
-              ipAddress,
-              isLoading: false,
-              lastSeen: new Date(),
-              isAuthenticated: true
-            });
-            console.log('Admin auth restored');
-          } else if (currentPort !== ADMIN_CREDENTIALS.port) {
-            // Auto-login as viewer for non-admin ports
-            const viewerUser: User = {
-              id: deviceId,
-              username: `Viewer_${Math.random().toString(36).substr(2, 9)}`,
-              role: 'viewer',
-              isOnline: true,
-              lastSeen: new Date(),
-              deviceId,
-              ipAddress,
-              status: 'Online'
-            };
-            
-            setAuthState({
-              user: viewerUser,
-              isAuthenticated: true,
-              isLoading: false,
-              deviceId,
-              ipAddress,
-              lastSeen: new Date()
-            });
-            
-            localStorage.setItem('auth', JSON.stringify(viewerUser));
-            console.log('Viewer auto-login:', viewerUser);
-          }
-        } else if (currentPort !== ADMIN_CREDENTIALS.port) {
-          // Auto-login as viewer for new sessions on non-admin ports
-          const viewerUser: User = {
-            id: deviceId,
-            username: `Viewer_${Math.random().toString(36).substr(2, 9)}`,
-            role: 'viewer',
-            isOnline: true,
-            lastSeen: new Date(),
-            deviceId,
-            ipAddress,
-            status: 'Online'
-          };
-          
           setAuthState({
-            user: viewerUser,
-            isAuthenticated: true,
-            isLoading: false,
+            ...userData,
             deviceId,
             ipAddress,
-            lastSeen: new Date()
+            isLoading: false,
+            lastSeen: new Date(),
+            isAuthenticated: true,
+            theme: storedTheme
           });
-          
-          localStorage.setItem('auth', JSON.stringify(viewerUser));
-          console.log('New viewer auto-login:', viewerUser);
+          console.log('Auth restored:', userData);
         } else {
           setAuthState(prev => ({
             ...prev,
             deviceId,
             ipAddress,
-            isLoading: false
+            isLoading: false,
+            theme: storedTheme
           }));
         }
       } catch (error) {
@@ -124,14 +68,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
   }, []);
 
+  // Apply theme changes
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    if (authState.theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(authState.theme || 'light');
+    }
+  }, [authState.theme]);
+
   const login = async (username: string, password: string) => {
     try {
-      const currentPort = window.location.port;
-      
-      if (currentPort !== ADMIN_CREDENTIALS.port) {
-        throw new Error('Port tidak valid untuk akses admin');
-      }
-
       if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
         const adminUser: User = {
           id: 'admin',
@@ -188,14 +139,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         status: 'Online'
       };
       
-      setAuthState({
+      setAuthState(prev => ({
+        ...prev,
         user: viewerUser,
         isAuthenticated: true,
-        isLoading: false,
-        deviceId,
-        ipAddress,
-        lastSeen: new Date()
-      });
+        isLoading: false
+      }));
       
       localStorage.setItem('auth', JSON.stringify(viewerUser));
       console.log('Viewer initialized:', viewerUser);
@@ -215,20 +164,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const setTheme = (theme: 'dark' | 'light' | 'system') => {
+    localStorage.setItem('theme', theme);
+    setAuthState(prev => ({ ...prev, theme }));
+  };
+
   const isAdmin = () => {
     return authState.user?.role === 'admin';
   };
 
   const logout = () => {
     localStorage.removeItem('auth');
-    setAuthState({
+    setAuthState(prev => ({
+      ...prev,
       user: null,
       isAuthenticated: false,
-      isLoading: false,
-      deviceId: authState.deviceId,
-      ipAddress: authState.ipAddress,
-      lastSeen: new Date()
-    });
+      isLoading: false
+    }));
     
     toast({
       title: "Logout Berhasil",
@@ -244,7 +196,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login, 
       logout,
       isAdmin,
-      initializeViewer
+      initializeViewer,
+      setTheme
     }}>
       {children}
     </AuthContext.Provider>
