@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatProps {
   isAdmin: boolean;
@@ -18,6 +19,7 @@ const Chat: React.FC<ChatProps> = ({ isAdmin }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,6 +41,12 @@ const Chat: React.FC<ChatProps> = ({ isAdmin }) => {
 
     setMessages([...messages, message]);
     setNewMessage('');
+    
+    toast({
+      title: "Pesan Terkirim",
+      description: "Pesan berhasil dikirim",
+    });
+    
     console.log('New message sent:', message);
   };
 
@@ -51,9 +59,8 @@ const Chat: React.FC<ChatProps> = ({ isAdmin }) => {
 
   return (
     <div className="bg-gray-900 rounded-lg p-4 h-[calc(100vh-2rem)] flex flex-col">
-      <h2 className="text-xl font-bold mb-4">Chat</h2>
+      <h2 className="text-xl font-bold mb-4">Chat Room</h2>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto mb-4 space-y-4">
         {messages.map((message) => (
           <div
@@ -80,20 +87,12 @@ const Chat: React.FC<ChatProps> = ({ isAdmin }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="flex gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-gray-400 hover:text-white"
-        >
-          <Smile className="h-5 w-5" />
-        </Button>
         <Input
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Type a message..."
+          placeholder="Ketik pesan..."
           className="flex-1 bg-gray-800 border-gray-700 text-white"
         />
         <Button
