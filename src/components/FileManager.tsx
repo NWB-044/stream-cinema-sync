@@ -14,105 +14,114 @@ interface FileItem {
   name: string;
   type: 'folder' | 'video' | 'subtitle';
   path: string;
+  handle?: FileSystemHandle;
   lastModified?: Date;
 }
+
+const VideoFileTypes = ['.mp4', '.webm', '.ogg', '.mov'];
+const SubtitleFileTypes = ['.srt', '.vtt', '.ass'];
 
 const FileManager: React.FC<FileManagerProps> = ({
   onVideoSelect,
   onSubtitleSelect,
   isAdmin
 }) => {
-  const [currentPath, setCurrentPath] = useState('/storage/emulated/0');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (isAdmin) {
-      fetchFiles(currentPath);
-    }
-  }, [currentPath, isAdmin]);
-
-  const fetchFiles = async (path: string) => {
+  const handleFileSelect = async () => {
     try {
-      // In a real implementation, this would use a native API to access device files
-      // For now, we'll simulate with some example files
-      const deviceFiles = await simulateDeviceFiles(path);
-      setFiles(deviceFiles);
-      setError(null);
-      console.log('Fetched files for path:', path);
-    } catch (err) {
-      setError('Failed to access device storage. Please check permissions.');
-      console.error('File access error:', err);
-    }
-  };
+      const dirHandle = await window.showDirectoryPicker({
+        mode: 'read'
+      });
 
-  const simulateDeviceFiles = async (path: string): Promise<FileItem[]> => {
-    // This is a temporary simulation
-    // In production, this would be replaced with actual device file access
-    return [
-      {
-        name: 'Videos',
-        type: 'folder',
-        path: `${path}/Videos`,
-        lastModified: new Date()
-      },
-      {
-        name: 'Downloads',
-        type: 'folder',
-        path: `${path}/Downloads`,
-        lastModified: new Date()
-      },
-      {
-        name: 'sample_video.mp4',
-        type: 'video',
-        path: `${path}/sample_video.mp4`,
-        lastModified: new Date()
+      const newFiles: FileItem[] = [];
+      for await (const entry of dirHandle.values()) {
+        const name = entry.name.toLowerCase();
+        if (entry.kind === 'file') {
+          if (VideoFileTypes.some(ext => name.endsWith(ext))) {
+            newFiles.push({
+              name: entry.name,
+              type: 'video',
+              path: entry.name,
+              handle: entry,
+              lastModified: new Date()
+            });
+          } else if (SubtitleFileTypes.some(ext => name.endsWith(ext))) {
+            newFiles.push({
+              name: entry.name,
+              type: 'subtitle',
+              path: entry.name,
+              handle: entry,
+              lastModified: new Date()
+            });
+          }
+        }
       }
-    ];
-  };
 
-  const handleFileClick = (file: FileItem) => {
-    if (!isAdmin) {
+      setFiles(newFiles);
+      setError(null);
+      console.log('Files loaded:', newFiles);
+    } catch (err) {
+      console.error('File access error:', err);
+      setError('Failed to access files. Please grant permission.');
       toast({
-        title: "Access Denied",
-        description: "Only admin can access files",
-        variant: "destructive"
+        title: "Error",
+        description: "Failed to access files",
+        variant: "destructive",
       });
-      return;
-    }
-    
-    if (file.type === 'folder') {
-      setCurrentPath(file.path);
-      console.log('Navigated to:', file.path);
-    } else if (file.type === 'video') {
-      onVideoSelect(file.path);
-      toast({
-        title: "Video Selected",
-        description: file.name,
-      });
-      console.log('Selected video:', file.path);
-    } else if (file.type === 'subtitle') {
-      onSubtitleSelect(file.path);
-      toast({
-        title: "Subtitle Selected",
-        description: file.name,
-      });
-      console.log('Selected subtitle:', file.path);
     }
   };
 
-  const navigateUp = () => {
-    const parentPath = currentPath.split('/').slice(0, -1).join('/');
-    if (parentPath) {
-      setCurrentPath(parentPath);
-      console.log('Navigated up to:', parentPath);
+  const handleFileClick = async (file: FileItem) => {
+    if (!isAdmin || !file.handle) return;
+
+    try {
+      if (file.handle.kind === 'file') {
+        const fileHandle = file.handle as FileSystemFileHandle;
+        const fileData = await fileHandle.getFile();
+        const url = URL.createObjectURL(fileData);
+
+        if (file.type === 'video') {
+          onVideoSelect(url);
+          toast({
+            title: "Video Selected",
+            description: file.name,
+          });
+        } else if (file.type === 'subtitle') {
+          onSubtitleSelect(url);
+          toast({
+            title: "Subtitle Selected",
+            description: file.name,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error accessing file:', err);
+      toast({
+        title: "Error",
+        description: "Failed to access file",
+        variant: "destructive",
+      });
     }
   };
 
   return (
     <div className="bg-gray-900 rounded-lg p-4 h-[calc(100vh-2rem)] flex flex-col">
-      <h2 className="text-xl font-bold mb-4">File Manager</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">File Manager</h2>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleFileSelect}
+            className="text-white hover:text-gray-200"
+          >
+            Select Folder
+          </Button>
+        )}
+      </div>
       
       {error && (
         <Alert variant="destructive" className="mb-4">
@@ -120,21 +129,6 @@ const FileManager: React.FC<FileManagerProps> = ({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
-      {/* Path navigation */}
-      <div className="flex items-center gap-2 mb-4 text-sm text-gray-400">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={navigateUp}
-          disabled={currentPath === '/storage/emulated/0'}
-          className="hover:text-white"
-        >
-          Up
-        </Button>
-        <ChevronRight className="h-4 w-4" />
-        <span className="truncate">{currentPath}</span>
-      </div>
 
       {/* File list */}
       <div className="flex-1 overflow-y-auto space-y-2">

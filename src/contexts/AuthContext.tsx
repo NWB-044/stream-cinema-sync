@@ -16,7 +16,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ADMIN_CREDENTIALS = {
   username: 'Bipho',
   password: 'Kipli123',
-  port: 2009
+  port: '2009'
 };
 
 // Store viewer usernames to prevent duplicates
@@ -47,38 +47,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (storedAuth) {
           const userData = JSON.parse(storedAuth);
-          if (userData.role === 'admin') {
-            // Only check port for admin
-            if (currentPort === String(ADMIN_CREDENTIALS.port)) {
-              setAuthState({
-                ...userData,
-                deviceId,
-                ipAddress,
-                isLoading: false,
-                lastSeen: new Date()
-              });
-              console.log('Admin auth restored');
-            } else {
-              localStorage.removeItem('auth');
-              setAuthState(prev => ({
-                ...prev,
-                deviceId,
-                ipAddress,
-                isLoading: false
-              }));
-            }
+          // Check if stored credentials match current environment
+          if (userData.role === 'admin' && currentPort === ADMIN_CREDENTIALS.port) {
+            setAuthState({
+              ...userData,
+              deviceId,
+              ipAddress,
+              isLoading: false,
+              lastSeen: new Date(),
+              isAuthenticated: true
+            });
+            console.log('Admin auth restored');
+          } else if (userData.role === 'viewer' && currentPort !== ADMIN_CREDENTIALS.port) {
+            setAuthState({
+              ...userData,
+              deviceId,
+              ipAddress,
+              isLoading: false,
+              lastSeen: new Date(),
+              isAuthenticated: true
+            });
+            console.log('Viewer auth restored');
           } else {
-            // For viewers, restore auth on any non-admin port
-            if (currentPort !== String(ADMIN_CREDENTIALS.port)) {
-              setAuthState({
-                ...userData,
-                deviceId,
-                ipAddress,
-                isLoading: false,
-                lastSeen: new Date()
-              });
-              console.log('Viewer auth restored');
-            }
+            // Clear invalid auth state
+            localStorage.removeItem('auth');
+            setAuthState(prev => ({
+              ...prev,
+              deviceId,
+              ipAddress,
+              isLoading: false,
+              isAuthenticated: false
+            }));
           }
         } else {
           setAuthState(prev => ({
@@ -93,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         toast({
           title: "Error",
           description: "Failed to initialize authentication",
-          variant: "destructive"
+          variant: "destructive",
         });
       }
     };
@@ -105,8 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const currentPort = window.location.port;
       
-      if (currentPort !== String(ADMIN_CREDENTIALS.port)) {
-        throw new Error('Invalid access port');
+      if (currentPort !== ADMIN_CREDENTIALS.port) {
+        throw new Error('Invalid access attempt');
       }
 
       if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
@@ -131,21 +130,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         localStorage.setItem('auth', JSON.stringify(adminUser));
         console.log('Admin login successful');
-        
-        toast({
-          title: "Welcome Admin",
-          description: "Login successful",
-        });
       } else {
         throw new Error('Invalid credentials');
       }
     } catch (error) {
       console.error('Login error:', error);
-      toast({
-        title: "Login Failed",
-        description: error instanceof Error ? error.message : "Invalid credentials",
-        variant: "destructive"
-      });
       throw error;
     }
   };
@@ -154,25 +143,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const currentPort = window.location.port;
       
-      if (currentPort === String(ADMIN_CREDENTIALS.port)) {
-        throw new Error('Viewers cannot access admin port');
+      if (currentPort === ADMIN_CREDENTIALS.port) {
+        throw new Error('Invalid port for viewer access');
       }
 
       if (usedUsernames.has(username)) {
         throw new Error('Username already taken');
       }
 
-      const deviceId = authState.deviceId || generateDeviceId();
-      const ipAddress = authState.ipAddress || await getIPAddress();
-      
       const viewerUser: User = {
-        id: deviceId,
+        id: authState.deviceId || generateDeviceId(),
         username,
         role: 'viewer',
-        deviceId,
-        ipAddress,
         isOnline: true,
         lastSeen: new Date(),
+        deviceId: authState.deviceId,
+        ipAddress: authState.ipAddress,
         profilePicture: '/placeholder.svg',
         status: 'Online'
       };
@@ -183,25 +169,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         user: viewerUser,
         isAuthenticated: true,
-        isLoading: false,
-        deviceId,
-        ipAddress
+        isLoading: false
       }));
       
       localStorage.setItem('auth', JSON.stringify(viewerUser));
       console.log('Viewer initialized:', viewerUser);
-      
-      toast({
-        title: "Welcome",
-        description: `Connected as ${username}`,
-      });
     } catch (error) {
       console.error('Viewer initialization error:', error);
-      toast({
-        title: "Connection Error",
-        description: error instanceof Error ? error.message : "Failed to connect",
-        variant: "destructive"
-      });
       throw error;
     }
   };
@@ -245,10 +219,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     
     console.log('User logged out');
-    toast({
-      title: "Logged Out",
-      description: "You have been logged out successfully",
-    });
   };
 
   return (
