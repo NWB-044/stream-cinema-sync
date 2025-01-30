@@ -18,3 +18,10 @@ export interface AuthState {
   ipAddress?: string;
   lastSeen?: Date;
 }
+
+export interface AuthContextType extends AuthState {
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
+  isAdmin: () => boolean;
+  initializeViewer: (username: string) => Promise<void>;
+}

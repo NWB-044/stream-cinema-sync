@@ -7,6 +7,7 @@ interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   isAdmin: () => boolean;
+  initializeViewer: (username: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -171,6 +172,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const initializeViewer = async (username: string) => {
+    try {
+      const deviceId = generateDeviceId();
+      const ipAddress = await getIPAddress();
+      
+      const viewerUser: User = {
+        id: deviceId,
+        username: username || `Viewer_${Math.random().toString(36).substr(2, 9)}`,
+        role: 'viewer',
+        isOnline: true,
+        lastSeen: new Date(),
+        deviceId,
+        ipAddress,
+        status: 'Online'
+      };
+      
+      setAuthState({
+        user: viewerUser,
+        isAuthenticated: true,
+        isLoading: false,
+        deviceId,
+        ipAddress,
+        lastSeen: new Date()
+      });
+      
+      localStorage.setItem('auth', JSON.stringify(viewerUser));
+      console.log('Viewer initialized:', viewerUser);
+      
+      toast({
+        title: "Login Berhasil",
+        description: "Selamat datang!",
+      });
+    } catch (error) {
+      console.error('Viewer initialization error:', error);
+      toast({
+        title: "Login Gagal",
+        description: "Terjadi kesalahan saat inisialisasi viewer",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   const isAdmin = () => {
     return authState.user?.role === 'admin';
   };
@@ -199,7 +243,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...authState, 
       login, 
       logout,
-      isAdmin 
+      isAdmin,
+      initializeViewer
     }}>
       {children}
     </AuthContext.Provider>
