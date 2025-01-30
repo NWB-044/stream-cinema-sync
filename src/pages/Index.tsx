@@ -15,7 +15,6 @@ const Index = () => {
 
   useEffect(() => {
     if (user?.role === 'viewer') {
-      // Generate a random username string
       const randomUsername = `Viewer_${Math.random().toString(36).substr(2, 9)}`;
       initializeViewer(randomUsername);
     }
@@ -38,7 +37,6 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-stream-background text-stream-text">
       <div className="container mx-auto p-4">
-        {/* Header with user info */}
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
             <span className="font-bold">{user?.username}</span>
@@ -58,7 +56,6 @@ const Index = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* File Manager Section - Only visible to admin */}
           {user?.role === 'admin' && (
             <div className="lg:col-span-3 animate-fadeIn">
               <FileManager 
@@ -69,7 +66,6 @@ const Index = () => {
             </div>
           )}
 
-          {/* Video Player Section */}
           <div className={`lg:col-span-${user?.role === 'admin' ? '6' : '9'} animate-fadeIn`}>
             <VideoPlayer
               src={currentVideo}
@@ -78,7 +74,6 @@ const Index = () => {
             />
           </div>
 
-          {/* Chat Section */}
           <div className="lg:col-span-3 animate-fadeIn">
             <Chat isAdmin={user?.role === 'admin'} />
           </div>
